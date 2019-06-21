@@ -61,37 +61,7 @@ test_dataset = tf.data.Dataset.from_tensor_slices(test_images[:te_N])
 batched_test_d = test_dataset.batch(BATCH_SIZE)#.map(lambda x:2*x-1)
 iterator_test = batched_test_d.make_initializable_iterator()
 test_images = iterator_test.get_next() 
-
-
-# print(images)
-#since there is no normalisation in the argo code 
-# real_data = 2 * images - 1
-# test_images = 2 * test_images - 1
-# train_images = 2 * train_images - 1
-'''
-        "discriminator" : [
-          ("Conv2D", {"output_channels" : 64, "kernel_shape" : [4,4], "stride" : 2},  1),
-          ("Conv2D", {"output_channels" : 128, "kernel_shape" : [4,4], "stride" : 2},  0),
-          ("BatchNorm", {"offset" : 1, "scale" : 1, "decay_rate" : 0.9},   1),
-          ("BatchFlatten", {}, 0),
-          ("Linear", {"output_size" : 1024}, 0),
-          ("BatchNorm", {"offset" : 1, "scale" : 1, "decay_rate" : 0.9},   1),
-          ("Linear", {"output_size" : 2}, 0),
-          ],
-         "generator" : [
-          # ("RandomUniform", {"shape": 62, "minval": -1, "maxval": 1}, 0),
-          ("RandomGaussian", {"shape": 62}, 0),#creating the latent space new feature
-          ("Linear", {"output_size" : 1024}, 0),
-          ("BatchNorm", {"offset" : 1, "scale" : 1, "decay_rate" : 0.9},   1),
-          ("Linear", {"output_size" : 128 * 7 * 7}, 0),
-          ("BatchNorm", {"offset" : 1, "scale" : 1, "decay_rate" : 0.9},   1),
-          ("BatchReshape", {"shape" : (7, 7, 128)}, 0),
-          ("Conv2DTranspose" ,{ "output_channels" : 64 ,"output_shape" : [14,14], "kernel_shape" : [4,4], "stride" : 2, "padding":"SAME" },    0),
-          ("BatchNorm", {"offset" : 1, "scale" : 1, "decay_rate" : 0.9},   1),
-          ("Conv2DTranspose" ,{ "output_channels" : 1 ,"output_shape" : [28,28], "kernel_shape" : [4,4], "stride" : 2, "padding":"SAME" },    0),
-          ("Sigmoid", {}, 0)
-          ],
-'''
+      
 
 class MnistGenerator(snt.AbstractModule):
 
@@ -318,10 +288,6 @@ for i in range(TRAINING_STEPS):
         _=sess.run(clip_discriminator_vars)
    
     _=sess.run(generator_update_op)
-    # real_logits=sess.run(discriminator_real_data_logits)
-    # fake_logits=sess.run(discriminator_generated_data_logits)
-    # pdb.set_trace()
-    # print(real_logits)
 
     if i%1000 == 0:
         final_samples = sess.run(samples)
