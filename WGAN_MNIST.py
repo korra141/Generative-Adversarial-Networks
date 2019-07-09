@@ -21,6 +21,8 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker
 
 import seaborn as sns
+from evaluation_score import inception_score,frechet_distance 
+
 tf.random.set_random_seed(547)
 tf.logging.set_verbosity(tf.logging.ERROR)
 
@@ -39,10 +41,11 @@ TRAINING_STEPS =50000 # @param
 
 
 mnist = tf.contrib.learn.datasets.load_dataset("mnist")
-train_images = mnist.train.images.reshape((-1, 28, 28, 1))
+train_images_original = mnist.train.images.reshape((-1, 28, 28, 1))
 # pdb.set_trace()
-test_images = mnist.test.images.reshape((-1, 28, 28, 1))
-dataset = tf.data.Dataset.from_tensor_slices(train_images)
+test_images_original = mnist.test.images.reshape((-1, 28, 28, 1))
+
+dataset = tf.data.Dataset.from_tensor_slices(train_images_original)
 batched_dataset = dataset.shuffle(100000).repeat().batch(BATCH_SIZE)
 iterator = batched_dataset.make_one_shot_iterator()
 real_data = iterator.get_next()
@@ -51,17 +54,34 @@ tr_N=int(np.floor(len(mnist.train.images)/BATCH_SIZE)*BATCH_SIZE)
 te_N=int(np.floor(len(mnist.test.images)/BATCH_SIZE)*BATCH_SIZE)
 
 
-train_dataset = tf.data.Dataset.from_tensor_slices(train_images[:tr_N])
+train_dataset = tf.data.Dataset.from_tensor_slices(train_images_original[:tr_N])
 batched_train_d = train_dataset.batch(BATCH_SIZE)#.map(lambda x:2*x-1)
 iterator_train = batched_train_d.make_initializable_iterator()
 train_images = iterator_train.get_next() 
 
 
-test_dataset = tf.data.Dataset.from_tensor_slices(test_images[:te_N])
+test_dataset = tf.data.Dataset.from_tensor_slices(test_images_original[:te_N])
 batched_test_d = test_dataset.batch(BATCH_SIZE)#.map(lambda x:2*x-1)
 iterator_test = batched_test_d.make_initializable_iterator()
 test_images = iterator_test.get_next() 
       
+BATCH_SIZE_SCORE= 1
+NUMBER_IMAGES=50
+# tr_N_SCORE = int(np.floor(len(mnist.train.images)/BATCH_SIZE_SCORE)*BATCH_SIZE_SCORE)
+# te_N_SCORE = int(np.floor(len(mnist.test.images)/BATCH_SIZE_SCORE)*BATCH_SIZE_SCORE)
+
+
+
+train_dataset_score = tf.data.Dataset.from_tensor_slices(train_images_original[:NUMBER_IMAGES])
+batched_train_d_score = train_dataset_score.batch(NUMBER_IMAGES)#.map(lambda x:2*x-1)
+iterator_train_score =batched_train_d_score.make_initializable_iterator()
+train_images_score = iterator_train_score.get_next() 
+
+test_dataset_score = tf.data.Dataset.from_tensor_slices(test_images_original[:NUMBER_IMAGES])
+batched_test_d_score=test_dataset_score.batch(NUMBER_IMAGES)#.map(lambda x:2*x-1)
+iterator_test_score =batched_test_d_score.make_initializable_iterator()
+test_images_score = iterator_test_score.get_next() 
+
 
 class MnistGenerator(snt.AbstractModule):
 
@@ -223,7 +243,14 @@ total_test_=tf.reduce_sum(total_test)
 accuracy_test=((total_fake_+total_test_)/(2*BATCH_SIZE))
 
 
+latents_score = tf.random_normal((NUMBER_IMAGES, NUM_LATENTS))
+samples_score = generator(latents_score)
+#pdb.set_trace()
+fid_train=frechet_distance(train_images_score,samples_score,BATCH_SIZE_SCORE)
+fid_test=frechet_distance(test_images_score,samples_score,BATCH_SIZE_SCORE)
 
+is_train=inception_score(samples_score,BATCH_SIZE_SCORE)
+is_test=inception_score(samples_score,BATCH_SIZE_SCORE)
 
 
 discrimiantor_optimizer = tf.train.RMSPropOptimizer(learning_rate=0.00005)
@@ -261,6 +288,12 @@ acc_test=[]
 
 disc_losses_test = []
 gen_losses_test = []
+
+fid_train_score = []
+fid_test_score = []
+
+is_train_score = []
+is_test_score = []
 
 import time
 way=os.getcwd()
@@ -327,6 +360,22 @@ for i in range(TRAINING_STEPS):
         gen_losses_train.append(g_loss_train_s/count_train)
         acc_train.append(acc_tr_s/count_train)
 
+
+        fid_train_s=0
+        is_train_s=0
+        count_train_score=0
+        sess.run(iterator_train_score.initializer)
+        while True:
+            try:
+                fid_train_,is_train_=sess.run([fid_train,is_train])
+                count_train_score=count_train_score+1
+                fid_train_s+=fid_train_
+                is_train_s+=is_train_
+            except tf.errors.OutOfRangeError:
+                break
+        fid_train_score.append(fid_train_s/count_train_score)
+        is_train_score.append(is_train_s/count_train_score)
+
         disc_loss_test_s=0
         g_loss_test_s=0
         acc_te_s=0
@@ -346,6 +395,21 @@ for i in range(TRAINING_STEPS):
         disc_losses_test.append(disc_loss_test_s/count_test)
         gen_losses_test.append(g_loss_test_s/count_test)
         acc_test.append(acc_te_s/count_test)
+
+        fid_test_s=0
+        count_test_score=0
+        is_test_s=0
+        sess.run(iterator_test_score.initializer)
+        while True:
+            try:
+                fid_test_,is_test_=sess.run([fid_test,is_test])
+                count_test_score=count_test_score+1
+                fid_test_s+=fid_test_
+                is_test_s+=is_test_
+            except tf.errors.OutOfRangeError:
+                break
+        fid_test_score.append(fid_test_s/count_test_score)
+        is_test_score.append(is_test_s/count_test_score)
         
         print('At iteration {} out of {}'.format(i, TRAINING_STEPS))
 # f.close()
@@ -377,10 +441,29 @@ ax3.plot(acc_train,'b',label='train')
 ax3.plot(acc_test,'r',label='test')
 ax3.legend(loc='upper left')
 
+fig4=plt.figure(figsize=(11,9))
+ax4=fig4.add_subplot(111)
+ax4.set_ylabel("FID SCORE")
+# ax3.ylim(0.001,0.005)
+ax4.plot(fid_train_score,'b',label='train')
+ax4.plot(fid_test_score,'r',label='test')
+ax4.legend(loc='upper left')
+
+fig5=plt.figure(figsize=(11,9))
+ax5=fig5.add_subplot(111)
+ax5.set_ylabel("IS SCORE")
+# ax3.ylim(0.001,0.005)
+ax5.plot(is_train_score,'b',label='train')
+ax5.plot(is_test_score,'r',label='test')
+ax5.legend(loc='upper left')
 plt.show()
+
 fig1.savefig(check +'/generator_loss.png')
 fig2.savefig(check +'/discriminator_loss.png')
 fig3.savefig(check + '/accu.png')
+fig4.savefig(check + '/fid_score.png')
+fig5.savefig(check + '/is_score.png')
+
 
 # fig.savefig(check+'/loss')
 
